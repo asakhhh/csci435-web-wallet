@@ -1,5 +1,6 @@
 # csci435-web-wallet
 Minimalist Hierarchical Deterministic Web Wallet for:
+- generating and managing wallet addresses
 - storing and managing keys
 - signing transactions
 
