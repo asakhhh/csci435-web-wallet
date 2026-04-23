@@ -1,6 +1,6 @@
 import { HDNodeWallet, ethers } from 'ethers'
 import { DERIVATION_BASE_PATH, SEPOLIA_RPC_URL } from '../utils/walletUtils'
-import { decryptSeed, loadWallet } from '../utils/storageUtils'
+import { decryptSecret, decryptSeed, loadWallet } from '../utils/storageUtils'
 
 type WalletRequest = {
   id: string | number
@@ -14,7 +14,7 @@ function parseValue(value: string | undefined): bigint {
   return ethers.parseEther(value)
 }
 
-async function unlockSeed(): Promise<string | null> {
+async function unlockSigner(): Promise<ethers.Wallet | null> {
   const wallet = await loadWallet()
   if (!wallet) return null
 
@@ -22,8 +22,25 @@ async function unlockSeed(): Promise<string | null> {
   const sessionPassword = typeof session.sessionPassword === 'string' ? session.sessionPassword : null
   if (!sessionPassword) return null
 
+  const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+
   try {
-    return await decryptSeed(wallet, sessionPassword)
+    if (wallet.encryptedSeed && wallet.iv && wallet.salt) {
+      const seed = await decryptSeed(wallet, sessionPassword)
+      return new ethers.Wallet(
+        HDNodeWallet.fromPhrase(seed, undefined, `${DERIVATION_BASE_PATH}/0`).privateKey,
+        provider,
+      )
+    }
+    if (wallet.importedAccounts?.length) {
+      const first = wallet.importedAccounts[0]
+      const privateKey = await decryptSecret(
+        { cipherText: first.encryptedPrivateKey, iv: first.iv, salt: first.salt },
+        sessionPassword,
+      )
+      return new ethers.Wallet(privateKey, provider)
+    }
+    return null
   } catch {
     return null
   }
@@ -37,17 +54,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const request = message.payload as WalletRequest
 
   ;(async () => {
-    const seed = await unlockSeed()
-    if (!seed) {
+    const signer = await unlockSigner()
+    if (!signer) {
       sendResponse({ id: request.id, error: 'Wallet locked. Unlock via extension popup.' })
       return
     }
 
     const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
-    const signer = new ethers.Wallet(
-      HDNodeWallet.fromPhrase(seed, undefined, `${DERIVATION_BASE_PATH}/0`).privateKey,
-      provider,
-    )
 
     try {
       switch (request.method) {

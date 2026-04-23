@@ -17,6 +17,23 @@ export function validateMnemonic(phrase: string): boolean {
   return Mnemonic.isValidMnemonic(phrase.trim())
 }
 
+export function normalizePrivateKey(privateKey: string): string {
+  return privateKey.trim().startsWith('0x') ? privateKey.trim() : `0x${privateKey.trim()}`
+}
+
+export function validatePrivateKey(privateKey: string): boolean {
+  try {
+    new Wallet(normalizePrivateKey(privateKey))
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function privateKeyToAddress(privateKey: string): string {
+  return new Wallet(normalizePrivateKey(privateKey)).address
+}
+
 export function deriveAccount(phrase: string, index = 0): Account {
   const normalized = phrase.trim().replace(/\s+/g, ' ')
   const wallet = HDNodeWallet.fromPhrase(normalized, undefined, `${DERIVATION_BASE_PATH}/${index}`)
@@ -48,5 +65,18 @@ export async function signAndSendTransaction(
     value: ethers.parseEther(amountEth),
   })
 
+  return tx.hash
+}
+
+export async function signAndSendTransactionWithPrivateKey(
+  privateKey: string,
+  to: string,
+  amountEth: string,
+): Promise<string> {
+  const signer = new Wallet(normalizePrivateKey(privateKey), new ethers.JsonRpcProvider(SEPOLIA_RPC_URL))
+  const tx = await signer.sendTransaction({
+    to,
+    value: ethers.parseEther(amountEth),
+  })
   return tx.hash
 }

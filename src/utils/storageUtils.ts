@@ -1,10 +1,25 @@
 const STORAGE_KEY = 'hd_wallet_v1'
 
-export type StoredWallet = {
-  encryptedSeed: string
+export type EncryptedPayload = {
+  cipherText: string
   iv: string
   salt: string
+}
+
+export type StoredImportedAccount = {
+  address: string
+  label?: string
+  encryptedPrivateKey: string
+  iv: string
+  salt: string
+}
+
+export type StoredWallet = {
+  encryptedSeed?: string
+  iv?: string
+  salt?: string
   accountCount: number
+  importedAccounts?: StoredImportedAccount[]
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -43,7 +58,7 @@ async function deriveAesKey(password: string, salt: Uint8Array): Promise<CryptoK
   )
 }
 
-export async function encryptSeed(seedPhrase: string, password: string): Promise<Omit<StoredWallet, 'accountCount'> & { accountCount?: number }> {
+export async function encryptSecret(secret: string, password: string): Promise<EncryptedPayload> {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const key = await deriveAesKey(password, salt)
@@ -51,24 +66,40 @@ export async function encryptSeed(seedPhrase: string, password: string): Promise
   const encrypted = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: asBufferSource(iv) },
     key,
-    asBufferSource(new TextEncoder().encode(seedPhrase)),
+    asBufferSource(new TextEncoder().encode(secret)),
   )
 
   return {
-    encryptedSeed: bytesToBase64(new Uint8Array(encrypted)),
+    cipherText: bytesToBase64(new Uint8Array(encrypted)),
     iv: bytesToBase64(iv),
     salt: bytesToBase64(salt),
   }
 }
 
-export async function decryptSeed(payload: StoredWallet, password: string): Promise<string> {
+export async function decryptSecret(payload: EncryptedPayload, password: string): Promise<string> {
   const key = await deriveAesKey(password, base64ToBytes(payload.salt))
   const decrypted = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: asBufferSource(base64ToBytes(payload.iv)) },
     key,
-    asBufferSource(base64ToBytes(payload.encryptedSeed)),
+    asBufferSource(base64ToBytes(payload.cipherText)),
   )
   return new TextDecoder().decode(decrypted)
+}
+
+export async function encryptSeed(seedPhrase: string, password: string): Promise<Omit<StoredWallet, 'accountCount'> & { accountCount?: number }> {
+  const encrypted = await encryptSecret(seedPhrase, password)
+  return {
+    encryptedSeed: encrypted.cipherText,
+    iv: encrypted.iv,
+    salt: encrypted.salt,
+  }
+}
+
+export async function decryptSeed(payload: StoredWallet, password: string): Promise<string> {
+  if (!payload.encryptedSeed || !payload.iv || !payload.salt) {
+    throw new Error('No seed phrase is available in storage.')
+  }
+  return decryptSecret({ cipherText: payload.encryptedSeed, iv: payload.iv, salt: payload.salt }, password)
 }
 
 export async function saveWallet(wallet: StoredWallet): Promise<void> {
@@ -78,12 +109,28 @@ export async function saveWallet(wallet: StoredWallet): Promise<void> {
 export async function loadWallet(): Promise<StoredWallet | null> {
   const result = await chrome.storage.local.get(STORAGE_KEY)
   const candidate = result[STORAGE_KEY] as Record<string, unknown> | undefined
-  if (
+  const importedAccounts = Array.isArray(candidate?.importedAccounts) ? candidate.importedAccounts : []
+  const importedAccountsValid = importedAccounts.every(
+    (entry) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as Record<string, unknown>).address === 'string' &&
+      typeof (entry as Record<string, unknown>).encryptedPrivateKey === 'string' &&
+      typeof (entry as Record<string, unknown>).iv === 'string' &&
+      typeof (entry as Record<string, unknown>).salt === 'string',
+  )
+
+  const seedPresent =
     candidate &&
     typeof candidate.encryptedSeed === 'string' &&
     typeof candidate.iv === 'string' &&
-    typeof candidate.salt === 'string' &&
-    typeof candidate.accountCount === 'number'
+    typeof candidate.salt === 'string'
+
+  if (
+    candidate &&
+    typeof candidate.accountCount === 'number' &&
+    importedAccountsValid &&
+    (seedPresent || importedAccounts.length > 0)
   ) {
     return candidate as StoredWallet
   }
