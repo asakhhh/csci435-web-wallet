@@ -5,6 +5,13 @@ import { createMnemonic, deriveAccount, deriveAccounts, getBalance, signAndSendT
 
 type Mode = 'loading' | 'onboarding' | 'unlock' | 'dashboard'
 type MessageType = 'error' | 'success' | 'info'
+type FieldErrors = {
+  seed?: string
+  password?: string
+  unlockPassword?: string
+  to?: string
+  amount?: string
+}
 
 function App() {
   const [mode, setMode] = useState<Mode>('loading')
@@ -22,6 +29,7 @@ function App() {
   const [isAddingAccount, setIsAddingAccount] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isLoadingBalance, setIsLoadingBalance] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
   useEffect(() => {
     ;(async () => {
@@ -66,12 +74,16 @@ function App() {
 
   async function persistWallet() {
     const normalizedSeed = normalizeSeed(seed)
+    const nextErrors: FieldErrors = {}
     if (password.length < 8) {
-      setMessage({ type: 'error', text: 'Password must be at least 8 characters.' })
-      return
+      nextErrors.password = 'Password must be at least 8 characters.'
     }
     if (!normalizedSeed) {
-      setMessage({ type: 'error', text: 'Seed phrase is required.' })
+      nextErrors.seed = 'Seed phrase is required.'
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors((prev) => ({ ...prev, ...nextErrors }))
+      setMessage({ type: 'error', text: 'Please fix the highlighted fields.' })
       return
     }
 
@@ -95,7 +107,9 @@ function App() {
   async function handleCreate(e: FormEvent) {
     e.preventDefault()
     setMessage(null)
+    setFieldErrors({})
     if (!validateMnemonic(normalizeSeed(seed))) {
+      setFieldErrors({ seed: 'Generated seed phrase is invalid. Generate a new one.' })
       setMessage({ type: 'error', text: 'Generated seed phrase is invalid. Generate a new one.' })
       return
     }
@@ -105,7 +119,9 @@ function App() {
   async function handleImport(e: FormEvent) {
     e.preventDefault()
     setMessage(null)
+    setFieldErrors({})
     if (!validateMnemonic(normalizeSeed(seed))) {
+      setFieldErrors({ seed: 'Invalid seed phrase. Please enter a valid BIP39 phrase.' })
       setMessage({ type: 'error', text: 'Invalid seed phrase.' })
       return
     }
@@ -115,7 +131,9 @@ function App() {
   async function handleUnlock(e: FormEvent) {
     e.preventDefault()
     if (!stored) return
+    setFieldErrors({})
     if (!password) {
+      setFieldErrors({ unlockPassword: 'Password is required.' })
       setMessage({ type: 'error', text: 'Enter your password to unlock.' })
       return
     }
@@ -151,12 +169,19 @@ function App() {
   }
 
   function validateSendInputs(): string | null {
+    const nextErrors: FieldErrors = {}
     if (!seed) return 'Wallet is locked. Unlock before sending.'
-    if (!to.trim()) return 'Destination address is required.'
-    if (!ethers.isAddress(to.trim())) return 'Destination address is invalid.'
-    if (!amount.trim()) return 'Amount is required.'
+    if (!to.trim()) nextErrors.to = 'Destination address is required.'
+    else if (!ethers.isAddress(to.trim())) nextErrors.to = 'Destination address is invalid.'
+    if (!amount.trim()) nextErrors.amount = 'Amount is required.'
     const parsedNumber = Number(amount)
-    if (!Number.isFinite(parsedNumber) || parsedNumber <= 0) return 'Amount must be a positive number.'
+    if (amount.trim() && (!Number.isFinite(parsedNumber) || parsedNumber <= 0)) {
+      nextErrors.amount = 'Amount must be a positive number.'
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors((prev) => ({ ...prev, ...nextErrors }))
+      return 'Please fix the highlighted send fields.'
+    }
     return null
   }
 
@@ -164,6 +189,7 @@ function App() {
     e.preventDefault()
     setMessage(null)
     setTxHash('')
+    setFieldErrors((prev) => ({ ...prev, to: undefined, amount: undefined }))
     const sendInputError = validateSendInputs()
     if (sendInputError) {
       setMessage({ type: 'error', text: sendInputError })
@@ -245,8 +271,10 @@ function App() {
           </button>
         </section>
         <textarea value={seed} onChange={(e) => setSeed(e.target.value)} rows={3} />
+        {fieldErrors.seed && <p className="field-error">{fieldErrors.seed}</p>}
         <form onSubmit={onboardingMode === 'create' ? handleCreate : handleImport}>
           <input type="password" placeholder="Master password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {fieldErrors.password && <p className="field-error">{fieldErrors.password}</p>}
           <button type="submit" disabled={isSaving}>
             {isSaving ? 'Saving...' : onboardingMode === 'create' ? 'Create Wallet' : 'Import Wallet'}
           </button>
@@ -262,6 +290,7 @@ function App() {
         {message && <p className={`message ${message.type}`}>{message.text}</p>}
         <form onSubmit={handleUnlock}>
           <input type="password" placeholder="Master password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {fieldErrors.unlockPassword && <p className="field-error">{fieldErrors.unlockPassword}</p>}
           <button type="submit" disabled={isUnlocking}>{isUnlocking ? 'Unlocking...' : 'Unlock'}</button>
           <button type="button" className="danger" onClick={() => void switchWalletFromUnlock()} disabled={isUnlocking}>
             Use Different Wallet
@@ -301,7 +330,9 @@ function App() {
         <h2>Send Transaction</h2>
         <form onSubmit={handleSend}>
           <input type="text" placeholder="Recipient address" value={to} onChange={(e) => setTo(e.target.value)} />
+          {fieldErrors.to && <p className="field-error">{fieldErrors.to}</p>}
           <input type="text" placeholder="Amount in ETH" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          {fieldErrors.amount && <p className="field-error">{fieldErrors.amount}</p>}
           <button type="submit" disabled={isSending}>{isSending ? 'Broadcasting...' : 'Sign and Broadcast'}</button>
         </form>
         {txHash && <p className="mono">Tx: {txHash}</p>}
