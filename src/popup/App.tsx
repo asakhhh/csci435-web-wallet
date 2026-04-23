@@ -294,7 +294,8 @@ function App() {
 
   function validateSendInputs(): string | null {
     const nextErrors: FieldErrors = {}
-    if (!seed) return 'Wallet is locked. Unlock before sending.'
+    if (!activeAccount) return 'No active account selected.'
+    if (activeAccount.source === 'hd' && !seed) return 'Wallet is locked. Unlock before sending.'
     if (!to.trim()) nextErrors.to = 'Destination address is required.'
     else if (!ethers.isAddress(to.trim())) nextErrors.to = 'Destination address is invalid.'
     if (!amount.trim()) nextErrors.amount = 'Amount is required.'
