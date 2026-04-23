@@ -3,7 +3,7 @@
   "name": "Minimalist HD Web Wallet",
   "version": "0.1.0",
   "description": "A browser extension HD wallet for account management and transaction signing.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "notifications"],
   "host_permissions": ["https://sepolia.infura.io/*", "https://*.infura.io/*", "https://*/*"],
   "action": {
     "default_title": "HD Wallet",

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bunx vite",
     "build": "bunx tsc -b && bunx vite build",
-    "lint": "bunx eslint ."
+    "lint": "bunx eslint .",
+    "test": "bunx vitest run"
   },
   "dependencies": {
     "ethers": "^6.15.0",
@@ -26,6 +27,7 @@
     "globals": "^16.5.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.3",
-    "vite": "^7.1.11"
+    "vite": "^7.1.11",
+    "vitest": "^4.0.2"
   }
 }

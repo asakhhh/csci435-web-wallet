@@ -1,18 +1,74 @@
-# csci435-web-wallet
-Minimalist Hierarchical Deterministic Web Wallet for:
-- generating and managing wallet addresses
-- storing and managing keys
-- signing transactions
+# CSCI435 Web Wallet
 
-## What is hierarchical deterministic web wallet?
-A hierarchical deterministic wallet is a special kind of wallet that uses a random number to create virtually infinite cryptocurrency key pairs.
+A browser-extension HD wallet prototype for CSCI 435 that supports onboarding, account management, and Sepolia transaction signing.
 
-Public blockchains basically allow anyone to view all the transactions and balances you’ve made on the blockchain. A hierarchical deterministic (HD) wallet ensures that no one can know your exact balance by creating multiple addresses.
+## Features
 
-### What does deterministic mean?
-Before HD wallets, non-deterministic wallets ruled the cryptocurrency world. They used to produce unrelated key pairs for every crypto account. For instance, the public key and the private key were unrelated despite being for the same wallet or account. What’s worse, the derived key pairs can’t be retraced to an original random phrase. This forced users to back up every key pair separately. For one or two wallets, backing up four keys is reasonable (but not convenient), but imagine when you’re managing 100 accounts? That makes for 200 unrelated keys for you to track, which is quite impractical. A hierarchical deterministic wallet solves this challenge.
+- Create wallet with generated BIP39 mnemonic.
+- Import wallet by seed phrase or private key.
+- Derive multiple HD accounts (`m/44'/60'/0'/0/{index}`).
+- Import additional external private-key accounts.
+- Lock/unlock wallet with encrypted local storage.
+- Get balance and send transactions on Sepolia.
+- Inject `window.ethereum` provider for dApp RPC calls.
 
-A hierarchical deterministic (HD) wallet describes a wallet that generates all its keys from a single recovery phrase in a tree-like pattern. This recovery phrase can be used to recreate the entire wallet, even if the wallet is lost or damaged. HD wallets have become popular for their convenience.
+## Project Structure
 
-## Sources
-[Hierarchical Deterministic Wallet (ledger.com)](https://www.ledger.com/academy/glossary/hierarchical-deterministic-wallet)
+- `src/popup/` extension UI for onboarding, unlock, dashboard, and send flow.
+- `src/background/` RPC request handling and signer actions.
+- `src/content/` bridge from web page to extension runtime.
+- `src/injected/` in-page provider exposed as `window.ethereum`.
+- `src/utils/` wallet derivation/transaction logic and encrypted storage helpers.
+
+## Setup
+
+### Prerequisites
+
+- Bun installed (`bun --version`)
+- Chrome/Chromium browser
+
+### Install
+
+```bash
+bun install
+```
+
+### Development
+
+```bash
+bun run dev
+```
+
+### Build
+
+```bash
+bun run build
+```
+
+### Lint
+
+```bash
+bun run lint
+```
+
+## Load Extension in Chrome
+
+1. Build the project with `bun run build`.
+2. Open `chrome://extensions`.
+3. Enable **Developer mode**.
+4. Click **Load unpacked** and select the project `dist` directory.
+5. Open the extension popup and complete onboarding.
+
+## Current Limitations
+
+- Network is currently fixed to Sepolia.
+- Provider RPC support is intentionally limited (basic account/sign/send flow).
+- No automated tests yet (planned in rubric improvement roadmap).
+- No per-request confirmation UI yet for dApp-initiated sign/send.
+
+## Rubric Evidence Docs
+
+- `docs/rubric-evidence.md`
+- `docs/contributions.md`
+- `docs/milestone-1.md`
+- `docs/milestone-2.md`

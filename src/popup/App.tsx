@@ -1,29 +1,13 @@
 import { ethers } from 'ethers'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { clearWallet, decryptSecret, decryptSeed, encryptSecret, encryptSeed, loadWallet, saveWallet, type StoredImportedAccount, type StoredWallet } from '../utils/storageUtils'
-import { createMnemonic, deriveAccount, deriveAccounts, getBalance, privateKeyToAddress, signAndSendTransaction, signAndSendTransactionWithPrivateKey, validateMnemonic, validatePrivateKey } from '../utils/walletUtils'
+import { createMnemonic, deriveAccounts, getBalance, privateKeyToAddress, signAndSendTransaction, signAndSendTransactionWithPrivateKey, validateMnemonic, validatePrivateKey } from '../utils/walletUtils'
+import type { DisplayAccount, FieldErrors, MessageType } from './types'
+import { OnboardingView } from './components/OnboardingView'
+import { UnlockView } from './components/UnlockView'
+import { DashboardView } from './components/DashboardView'
 
 type Mode = 'loading' | 'onboarding' | 'unlock' | 'dashboard'
-type MessageType = 'error' | 'success' | 'info'
-type FieldErrors = {
-  seed?: string
-  privateKey?: string
-  importPrivateKey?: string
-  importPrivateKeyLabel?: string
-  password?: string
-  unlockPassword?: string
-  to?: string
-  amount?: string
-}
-
-type DisplayAccount = {
-  id: string
-  address: string
-  label: string
-  source: 'hd' | 'privateKey'
-  index?: number
-  privateKey?: string
-}
 
 function App() {
   const [mode, setMode] = useState<Mode>('loading')
@@ -88,6 +72,15 @@ function App() {
     () => accounts.find((account) => account.id === selectedAccountId) ?? accounts[0],
     [accounts, selectedAccountId],
   )
+
+  useEffect(() => {
+    if (!activeAccount) return
+    const value =
+      activeAccount.source === 'hd'
+        ? { source: 'hd', index: activeAccount.index ?? 0, address: activeAccount.address }
+        : { source: 'privateKey', address: activeAccount.address }
+    void chrome.storage.session.set({ activeAccount: value })
+  }, [activeAccount])
 
   useEffect(() => {
     if (!activeAccount) return
@@ -414,6 +407,7 @@ function App() {
 
   async function lockWallet() {
     await chrome.storage.session.remove('sessionPassword')
+    await chrome.storage.session.remove('activeAccount')
     setSeed('')
     setPassword('')
     setTo('')
@@ -431,6 +425,7 @@ function App() {
   async function switchWallet(skipConfirmation = false) {
     if (!skipConfirmation && !window.confirm('This clears the current wallet from extension storage. Continue?')) return
     await chrome.storage.session.remove('sessionPassword')
+    await chrome.storage.session.remove('activeAccount')
     await clearWallet()
     setStored(null)
     setSeed('')
@@ -455,177 +450,69 @@ function App() {
 
   if (mode === 'loading') return <main className="card">Loading wallet...</main>
 
-  if (mode === 'onboarding') {
+  if (mode === 'onboarding')
     return (
-      <main className="card">
-        <h1>HD Wallet Setup</h1>
-        <p className="muted">Save this 12-word seed phrase securely before continuing.</p>
-        {message && <p className={`message ${message.type}`}>{message.text}</p>}
-        <section className="panel">
-          <button
-            type="button"
-            onClick={() => {
-              setOnboardingMode('create')
-              setSeed(createMnemonic())
-              setMessage(null)
-            }}
-            disabled={isSaving}
-          >
-            Create New Wallet
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setOnboardingMode('import-seed')
-              setSeed('')
-              setPrivateKeyInput('')
-              setMessage(null)
-            }}
-            disabled={isSaving}
-          >
-            Import by Seed Phrase
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setOnboardingMode('import-private-key')
-              setPrivateKeyInput('')
-              setSeed('')
-              setMessage(null)
-            }}
-            disabled={isSaving}
-          >
-            Import by Private Key
-          </button>
-        </section>
-        {onboardingMode !== 'import-private-key' ? (
-          <>
-            <textarea value={seed} onChange={(e) => setSeed(e.target.value)} rows={3} />
-            {fieldErrors.seed && <p className="field-error">{fieldErrors.seed}</p>}
-          </>
-        ) : (
-          <>
-            <input
-              type="password"
-              placeholder="Private key (0x...)"
-              value={privateKeyInput}
-              onChange={(e) => setPrivateKeyInput(e.target.value)}
-            />
-            {fieldErrors.privateKey && <p className="field-error">{fieldErrors.privateKey}</p>}
-          </>
-        )}
-        <form
-          onSubmit={
-            onboardingMode === 'create'
-              ? handleCreate
-              : onboardingMode === 'import-seed'
-                ? handleImport
-                : handleImportPrivateKey
-          }
-        >
-          <input type="password" placeholder="Master password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          {fieldErrors.password && <p className="field-error">{fieldErrors.password}</p>}
-          <button type="submit" disabled={isSaving}>
-            {isSaving ? 'Saving...' : onboardingMode === 'create' ? 'Create Wallet' : 'Import Wallet'}
-          </button>
-        </form>
-      </main>
+      <OnboardingView
+        message={message}
+        isSaving={isSaving}
+        onboardingMode={onboardingMode}
+        seed={seed}
+        privateKeyInput={privateKeyInput}
+        password={password}
+        fieldErrors={fieldErrors}
+        setOnboardingMode={setOnboardingMode}
+        setSeed={setSeed}
+        setPrivateKeyInput={setPrivateKeyInput}
+        setMessage={setMessage}
+        setPassword={setPassword}
+        handleCreate={handleCreate}
+        handleImport={handleImport}
+        handleImportPrivateKey={handleImportPrivateKey}
+        createMnemonic={createMnemonic}
+      />
     )
-  }
 
-  if (mode === 'unlock') {
+  if (mode === 'unlock')
     return (
-      <main className="card">
-        <h1>Unlock Wallet</h1>
-        {message && <p className={`message ${message.type}`}>{message.text}</p>}
-        <form onSubmit={handleUnlock}>
-          <input type="password" placeholder="Master password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          {fieldErrors.unlockPassword && <p className="field-error">{fieldErrors.unlockPassword}</p>}
-          <button type="submit" disabled={isUnlocking}>{isUnlocking ? 'Unlocking...' : 'Unlock'}</button>
-          <button type="button" className="danger" onClick={() => void switchWalletFromUnlock()} disabled={isUnlocking}>
-            Use Different Wallet
-          </button>
-        </form>
-      </main>
+      <UnlockView
+        message={message}
+        password={password}
+        isUnlocking={isUnlocking}
+        fieldErrors={fieldErrors}
+        setPassword={setPassword}
+        handleUnlock={handleUnlock}
+        switchWalletFromUnlock={() => void switchWalletFromUnlock()}
+      />
     )
-  }
-
-  const primary = activeAccount
 
   return (
-    <main className="card">
-      <h1>Wallet Dashboard</h1>
-      <p className="muted">Network: Sepolia</p>
-      {message && <p className={`message ${message.type}`}>{message.text}</p>}
-      <section className="panel">
-        <h2>Active Account</h2>
-        {accounts.length > 1 && (
-          <select
-            value={activeAccount?.id ?? ''}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
-          >
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.label}
-              </option>
-            ))}
-          </select>
-        )}
-        <p className="mono">{primary?.address ?? (seed ? deriveAccount(seed, 0).address : 'No account available')}</p>
-        <p>Balance: {isLoadingBalance ? 'Loading...' : `${Number(balance).toFixed(5)} ETH`}</p>
-        <button type="button" onClick={() => primary && void refreshBalance(primary.address)} disabled={isLoadingBalance || !primary}>
-          Refresh Balance
-        </button>
-      </section>
-
-      <section className="panel">
-        <h2>Accounts</h2>
-        {accounts.map((account) => (
-          <p key={account.id} className="mono">{account.label} {account.address}</p>
-        ))}
-        <button type="button" onClick={() => void addAccount()} disabled={isAddingAccount || !seed}>
-          {isAddingAccount ? 'Adding...' : 'Add Account'}
-        </button>
-      </section>
-
-      <section className="panel">
-        <h2>Import External Account</h2>
-        <input
-          type="password"
-          placeholder="Private key (0x...)"
-          value={importAccountKey}
-          onChange={(e) => setImportAccountKey(e.target.value)}
-        />
-        {fieldErrors.importPrivateKey && <p className="field-error">{fieldErrors.importPrivateKey}</p>}
-        <input
-          type="text"
-          placeholder="Label (optional)"
-          value={importAccountLabel}
-          onChange={(e) => setImportAccountLabel(e.target.value)}
-        />
-        {fieldErrors.importPrivateKeyLabel && <p className="field-error">{fieldErrors.importPrivateKeyLabel}</p>}
-        <button type="button" onClick={() => void importExternalAccount()}>
-          Import External Account
-        </button>
-      </section>
-
-      <section className="panel">
-        <h2>Send Transaction</h2>
-        <form onSubmit={handleSend}>
-          <input type="text" placeholder="Recipient address" value={to} onChange={(e) => setTo(e.target.value)} />
-          {fieldErrors.to && <p className="field-error">{fieldErrors.to}</p>}
-          <input type="text" placeholder="Amount in ETH" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          {fieldErrors.amount && <p className="field-error">{fieldErrors.amount}</p>}
-          <button type="submit" disabled={isSending}>{isSending ? 'Broadcasting...' : 'Sign and Broadcast'}</button>
-        </form>
-        {txHash && <p className="mono">Tx: {txHash}</p>}
-      </section>
-      <section className="panel">
-        <h2>Wallet Controls</h2>
-        <button type="button" className="secondary" onClick={() => void lockWallet()}>Lock Wallet</button>
-        <button type="button" className="danger" onClick={() => void switchWallet()}>Switch to Another Wallet</button>
-      </section>
-    </main>
+    <DashboardView
+      message={message}
+      accounts={accounts}
+      activeAccount={activeAccount}
+      balance={balance}
+      isLoadingBalance={isLoadingBalance}
+      isAddingAccount={isAddingAccount}
+      canAddHdAccount={Boolean(seed)}
+      isSending={isSending}
+      to={to}
+      amount={amount}
+      txHash={txHash}
+      importAccountKey={importAccountKey}
+      importAccountLabel={importAccountLabel}
+      fieldErrors={fieldErrors}
+      setSelectedAccountId={setSelectedAccountId}
+      refreshBalance={(address) => void refreshBalance(address)}
+      addAccount={() => void addAccount()}
+      setImportAccountKey={setImportAccountKey}
+      setImportAccountLabel={setImportAccountLabel}
+      importExternalAccount={() => void importExternalAccount()}
+      handleSend={handleSend}
+      setTo={setTo}
+      setAmount={setAmount}
+      lockWallet={() => void lockWallet()}
+      switchWallet={() => void switchWallet()}
+    />
   )
 }
 

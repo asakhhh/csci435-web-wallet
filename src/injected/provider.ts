@@ -36,6 +36,10 @@ const provider = {
   },
 }
 
+void provider.request({ method: 'eth_chainId' }).then((chainId) => {
+  if (typeof chainId === 'string') provider.emit('chainChanged', chainId)
+})
+
 void provider.request({ method: 'eth_accounts' }).then((accounts) => {
   const first = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : null
   provider.selectedAddress = first
