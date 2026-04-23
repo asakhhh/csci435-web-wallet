@@ -38,7 +38,6 @@ function asBufferSource(bytes: Uint8Array): BufferSource {
 }
 
 async function deriveAesKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
-  // Derive a per-wallet key so leaked ciphertext cannot be reused across passwords/salts.
   const passwordBytes = new TextEncoder().encode(password)
   const keyMaterial = await crypto.subtle.importKey('raw', asBufferSource(passwordBytes), 'PBKDF2', false, ['deriveKey'])
 

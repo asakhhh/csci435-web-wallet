@@ -265,7 +265,6 @@ function App() {
           return
         }
       } catch {
-        // no-op
       }
       setMessage({ type: 'error', text: 'Wrong password.' })
     } finally {
